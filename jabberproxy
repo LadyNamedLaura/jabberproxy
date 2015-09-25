@@ -1,0 +1,67 @@
+#!/usr/bin/python2
+
+import warnings
+warnings.simplefilter("ignore")
+
+import xmpp
+from xmpp.protocol import Message
+
+from optparse import OptionParser
+import ConfigParser
+import sys
+import os
+
+parser = OptionParser()
+
+parser.add_option("-u", "--username",
+                  help="jabber username")
+parser.add_option("-a", "--alias",
+                  help="jabber alias")
+parser.add_option("-p", "--pass", dest="password",
+                  help="jabber password")
+parser.add_option("-s", "--server",
+                  help="jabber server")
+parser.add_option("--port",
+                  default=5222, type='int',
+                  help="port to connect to")
+parser.add_option("--path",
+                  default="/tmp/jabberproxy",
+                  help="path for fifo")
+
+opts, args = parser.parse_args()
+
+print(args)
+print(opts)
+
+uname, domain = opts.username.split("@")
+if opts.alias is None:
+    opts.alias = uname
+
+try:
+    os.mkfifo(opts.path)
+except OSError, e:
+    print "Failed to create FIFO: %s" % e
+
+fifo = open(opts.path, 'r')
+rooms = args
+
+# Connect to the server
+c  =  xmpp.Client(domain)
+c.connect((opts.server,opts.port))
+
+# Authenticate to the server
+jid  =  xmpp.protocol.JID( opts.username )
+c.auth( jid.getNode( ), opts.password )
+for room in rooms:
+    c.send(xmpp.Presence(to='%s/%s'% (room, opts.alias)))
+
+while True:
+    fifo = open(opts.path, 'r')
+    for msg in fifo:
+        msg = msg.strip()
+        if msg == "":
+            continue
+        msg = msg.replace('\\n', '\n')
+        for room in rooms:
+            c.send(Message('%s' % room, '%s' % msg, 'groupchat'))  
+    fifo.close() 
