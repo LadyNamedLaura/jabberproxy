@@ -11,6 +11,13 @@ import ConfigParser
 import sys
 import os
 
+import yaml
+
+
+f = open('/etc/jabberproxy.yml')
+conf = yaml.safe_load(f)
+f.close()
+
 parser = OptionParser()
 
 parser.add_option("-u", "--username",
@@ -30,38 +37,42 @@ parser.add_option("--path",
 
 opts, args = parser.parse_args()
 
-print(args)
+for k, v in opts.__dict__.iteritems():
+    if v is not None:
+        conf[k] = v
 print(opts)
+print(args)
+print(conf)
 
-uname, domain = opts.username.split("@")
-if opts.alias is None:
-    opts.alias = uname
+uname, domain = conf["username"].split("@")
+if not "alias" in conf:
+    conf["alias"] = uname
+
+if len(args) > 0:
+    conf["rooms"] = args
 
 try:
-    os.mkfifo(opts.path)
+    os.mkfifo(conf["path"])
 except OSError, e:
     print "Failed to create FIFO: %s" % e
 
-fifo = open(opts.path, 'r')
-rooms = args
-
 # Connect to the server
 c  =  xmpp.Client(domain)
-c.connect((opts.server,opts.port))
+c.connect((conf["server"],conf["port"]))
 
 # Authenticate to the server
-jid  =  xmpp.protocol.JID( opts.username )
-c.auth( jid.getNode( ), opts.password )
-for room in rooms:
-    c.send(xmpp.Presence(to='%s/%s'% (room, opts.alias)))
+jid  =  xmpp.protocol.JID( conf["username"] )
+c.auth( jid.getNode( ), conf["password"] )
+for room in conf["rooms"]:
+    c.send(xmpp.Presence(to='%s/%s'% (room, conf["alias"])))
 
 while True:
-    fifo = open(opts.path, 'r')
+    fifo = open(conf["path"], 'r')
     for msg in fifo:
         msg = msg.strip()
         if msg == "":
             continue
         msg = msg.replace('\\n', '\n')
-        for room in rooms:
+        for room in conf["rooms"]:
             c.send(Message('%s' % room, '%s' % msg, 'groupchat'))  
     fifo.close() 
